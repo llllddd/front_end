@@ -262,11 +262,6 @@ export default function ListMetadataPage() {
                             </Link>
                           </span>
                         </Tooltip>
-                        <Tooltip color="danger" content="Delete user">
-                          <span className="text-lg text-danger cursor-pointer active:opacity-50">
-                            {3}
-                          </span>
-                        </Tooltip>
                       </div>
                     </TableCell>
                   </TableRow>

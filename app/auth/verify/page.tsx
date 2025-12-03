@@ -56,9 +56,8 @@ export default function VerifyPage() {
             <Alert color="danger" variant="flat" title={error} />
           )}
 
-          {/* 按钮区 */}
           <div className="flex flex-wrap gap-3 pt-4">
-            {/* 回首页 */}
+            {/* Back to Home */}
             <Button
               color="primary"
               variant="solid"
@@ -67,7 +66,7 @@ export default function VerifyPage() {
               {strings.buttonHome}
             </Button>
 
-            {/* 发送新的验证邮件 */}
+            {/* Send new verification email */}
             {!sent && (
               <Button
                 color="secondary"
@@ -78,7 +77,7 @@ export default function VerifyPage() {
               </Button>
             )}
 
-            {/* 重设邮箱 */}
+            {/* Reset email */}
             <Button
               color="default"
               variant="bordered"

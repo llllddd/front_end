@@ -16,10 +16,13 @@ import { Card, CardHeader, CardBody } from "@heroui/card";
 import { Spinner } from "@heroui/spinner";
 import { Alert } from "@heroui/alert";
 import { Accordion, AccordionItem } from "@heroui/accordion";
+import { Snippet } from "@heroui/snippet";
+import { Chip } from "@heroui/chip";
+import { Tooltip } from "@heroui/tooltip";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 const DETAIL_ENDPOINT = "/dataset/detail";
-const HISTORY_ENDPOINT = "/dataset/history";
+import { getMetadataHistory, deleteDataset } from "@/utils/api/dataset";
 
 interface Metadata {
   metaDataId: string;
@@ -58,11 +61,33 @@ export default function MetadataDetailPage() {
   const [txns, setTxns] = React.useState<Txn[]>([]);
   const [txLoading, setTxLoading] = React.useState(false);
   const [txError, setTxError] = React.useState<string | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
+  async function handleUnregister() {
+    if (!id) return;
+    const ok = window.confirm("Unregister this dataset? This cannot be undone.");
+    if (!ok) return;
+    try {
+      setDeleting(true);
+      setDeleteError(null);
+      await deleteDataset(Number(id));
+      // After successful unregister, navigate back to list page
+      window.location.assign("/dataset/list");
+    } catch (err: any) {
+      setDeleteError(err?.message ?? "Failed to unregister");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // Fetch metadata
   React.useEffect(() => {
     if (!id) return;
-    if (!API_BASE) return setError("Missing NEXT_PUBLIC_API_BASE_URL");
+    if (!API_BASE) {
+      setError("Missing NEXT_PUBLIC_API_BASE_URL");
+      return;
+    }
 
     (async () => {
       try {
@@ -84,25 +109,15 @@ export default function MetadataDetailPage() {
     })();
   }, [id]);
 
-  // Fetch transaction history
+  // Fetch transaction history via utils API
   React.useEffect(() => {
     if (!id) return;
-    if (!API_BASE) return setTxError("Missing NEXT_PUBLIC_API_BASE_URL");
-
     (async () => {
       try {
         setTxLoading(true);
         setTxError(null);
-
-        const res = await fetch(
-          `${API_BASE}${HISTORY_ENDPOINT}/${encodeURIComponent(id)}`,
-          { cache: "no-store" }
-        );
-
-        if (!res.ok)
-          throw new Error(`Transaction history request failed: ${res.status}`);
-
-        setTxns(await res.json());
+        const data = await getMetadataHistory(Number(id));
+        setTxns(data);
       } catch (err: any) {
         setTxError(err?.message ?? "Failed to load history");
       } finally {
@@ -111,20 +126,77 @@ export default function MetadataDetailPage() {
     })();
   }, [id]);
 
+  const statusColor = getStatusColor(data?.status);
+
   return (
-    <main className="mx-auto max-w-4xl p-6 space-y-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Metadata Detail</h1>
+    <main className="mx-auto max-w-5xl p-6 space-y-6">
+      {/* The Title */}
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {data?.title ?? "Metadata Detail"}
+            </h1>
+            {data?.status && (
+              <Chip
+                size="sm"
+                color={statusColor}
+                variant="flat"
+                className="uppercase"
+              >
+                {data.status}
+              </Chip>
+            )}
+          </div>
+
+          {data && (
+            <div className="flex flex-wrap items-center gap-3 text-xs md:text-sm text-default-500">
+              <span className="font-mono text-[11px] md:text-xs">
+                ID: {data.metaDataId}
+              </span>
+              <span>•</span>
+              <span>
+                Created:{" "}
+                {formatTimestamp(
+                  typeof data.createdAt === "number"
+                    ? data.createdAt
+                    : Date.parse(String(data.createdAt))
+                )}
+              </span>
+              <span>•</span>
+              <span>
+                Updated:{" "}
+                {formatTimestamp(
+                  typeof data.updatedAt === "number"
+                    ? data.updatedAt
+                    : Date.parse(String(data.updatedAt))
+                )}
+              </span>
+            </div>
+          )}
+        </div>
+
         {id && (
-          <Button
-            as={Link}
-            href={`/dataset/${id}/edit`}
-            color="primary"
-            size="sm"
-            radius="lg"
-          >
-            Edit Metadata
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              as={Link}
+              href={`/dataset/${id}/edit`}
+              color="primary"
+              size="sm"
+              radius="lg"
+            >
+              Edit Metadata
+            </Button>
+            <Button
+              color="danger"
+              size="sm"
+              radius="lg"
+              onClick={handleUnregister}
+              isDisabled={deleting}
+            >
+              {deleting ? "Unregistering…" : "Unregister"}
+            </Button>
+          </div>
         )}
       </header>
 
@@ -137,176 +209,184 @@ export default function MetadataDetailPage() {
       )}
 
       {error && <Alert color="danger" variant="flat" description={error} />}
+      {deleteError && (
+        <Alert color="danger" variant="flat" description={deleteError} />
+      )}
 
       {loading && (
-        <div className="flex items-center gap-2 text-gray-600">
+        <div className="flex items-center gap-2 text-default-500">
           <Spinner size="sm" /> Loading…
         </div>
       )}
 
+      {/* Main content: two-column layout, more modern */}
       {data && (
-        <Card shadow="sm">
-          <CardHeader>
-            <h2 className="text-lg font-semibold">Metadata Info</h2>
-          </CardHeader>
-          <CardBody className="overflow-x-auto w-full p-0">
-            <Table className="w-full" removeWrapper aria-label="Metadata table">
-              <TableHeader>
-                <TableColumn>Property</TableColumn>
-                <TableColumn className="w-auto">Value</TableColumn>
-              </TableHeader>
-              <TableBody>
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    metaDataId
-                  </TableCell>
-                  <TableCell>{data.metaDataId}</TableCell>
-                </TableRow>
+        <section className="grid gap-6 md:grid-cols-[minmax(0,2fr),minmax(0,1.4fr)]">
+          {/* Left: description */}
+          <Card shadow="sm" className="border border-default-100/70">
+            <CardHeader className="flex items-center justify-between px-6 py-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-default-500">
+                Overview
+              </h2>
+            </CardHeader>
+            <CardBody className="space-y-5 px-6 pb-6 pt-0">
+              <InfoField label="Title">{data.title || "—"}</InfoField>
+              <InfoField label="Publisher">{data.publisher || "—"}</InfoField>
+              <InfoField label="Abstract">
+                {data.abstract || (
+                  <span className="text-default-400">No abstract.</span>
+                )}
+              </InfoField>
+              <div className="grid gap-4 md:grid-cols-2">
+                <InfoField label="License">{data.license || "—"}</InfoField>
+                <InfoField label="Keyword">{data.keyword || "—"}</InfoField>
+                <InfoField label="DOI">
+                  {data.doi ? (
+                    isUrl(data.doi) ? (
+                      <Link
+                        href={data.doi}
+                        isExternal
+                        className="text-primary-400 hover:underline"
+                      >
+                        {data.doi}
+                      </Link>
+                    ) : (
+                      data.doi
+                    )
+                  ) : (
+                    "—"
+                  )}
+                </InfoField>
+                <InfoField label="Contact">{data.contact || "—"}</InfoField>
+              </div>
+            </CardBody>
+          </Card>
 
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    Title
-                  </TableCell>
-                  <TableCell>{data.title}</TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    Publisher
-                  </TableCell>
-                  <TableCell>{data.publisher}</TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    Abstract
-                  </TableCell>
-                  <TableCell>{data.abstract}</TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    License
-                  </TableCell>
-                  <TableCell>{data.license}</TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    Keyword
-                  </TableCell>
-                  <TableCell>{data.keyword}</TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    DOI
-                  </TableCell>
-                  <TableCell>{data.doi}</TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    Contact
-                  </TableCell>
-                  <TableCell>{data.contact}</TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    Owner
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-mono">{data.owner}</span>
-                  </TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    Provider ID
-                  </TableCell>
-                  <TableCell>{data.providerId}</TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    Status
-                  </TableCell>
-                  <TableCell>{data.status}</TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    Metadata Hash
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-mono">{data.metadataHash}</span>
-                  </TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    Created At
-                  </TableCell>
-                  <TableCell>
-                    {new Date(data.createdAt).toLocaleString()}
-                  </TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell className="font-medium text-gray-700">
-                    Updated At
-                  </TableCell>
-                  <TableCell>
-                    {new Date(data.updatedAt).toLocaleString()}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </CardBody>
-        </Card>
+          {/* Right: On-chain / System Information */}
+          <Card shadow="sm" className="border border-default-100/70">
+            <CardHeader className="flex items-center justify-between px-6 py-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-default-500">
+                On-chain & System
+              </h2>
+            </CardHeader>
+            <CardBody className="space-y-4 px-6 pb-6 pt-0">
+              <InfoField label="Status">
+                <Chip
+                  size="sm"
+                  color={statusColor}
+                  variant="flat"
+                  className="uppercase"
+                >
+                  {data.status}
+                </Chip>
+              </InfoField>
+              <InfoField label="Owner">
+                <Snippet
+                  size="sm"
+                  hideSymbol
+                  variant="bordered"
+                  className="max-w-full"
+                >
+                  {data.owner}
+                </Snippet>
+              </InfoField>
+              <InfoField label="Metadata Hash">
+                <Snippet
+                  size="sm"
+                  hideSymbol
+                  variant="bordered"
+                  className="max-w-full"
+                >
+                  <Tooltip
+                    content={data.metadataHash}
+                    showArrow
+                    placement="top"
+                  >
+                    {truncateMiddle(data.metadataHash, 35, 6)}
+                  </Tooltip>
+                </Snippet>
+              </InfoField>
+              <InfoField label="Provider ID">
+                <span className="font-mono text-xs">{data.providerId}</span>
+              </InfoField>
+            </CardBody>
+          </Card>
+        </section>
       )}
 
-      <Card shadow="sm">
-        <CardHeader className="flex justify-between items-center">
-          <h2 className="text-lg font-semibold">Transaction History</h2>
+      {/* Transaction History: closer to a block explorer feel */}
+      <Card shadow="sm" className="border border-default-100/70">
+        <CardHeader className="flex items-center justify-between px-6 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-default-500">
+            Transaction History
+          </h2>
           {txLoading && (
-            <div className="flex items-center gap-2 text-gray-600">
+            <div className="flex items-center gap-2 text-default-500">
               <Spinner size="sm" /> Loading…
             </div>
           )}
         </CardHeader>
 
-        <CardBody>
+        <CardBody className="px-6 pb-6 pt-0">
           {txError ? (
             <Alert color="danger" variant="bordered" description={txError} />
           ) : txns.length === 0 && !txLoading ? (
-            <p className="text-sm text-gray-600">No transactions.</p>
+            <p className="text-sm text-default-500">No transactions.</p>
           ) : (
             <Accordion variant="splitted">
               {txns.map((t, i) => (
                 <AccordionItem
                   key={i}
-                  title={`#${i + 1} – ${t.event}`}
-                  subtitle={formatTimestamp(t.timestamp)}
+                  title={
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-mono text-default-500">
+                        #{i + 1}
+                      </span>
+                      <span className="text-sm font-semibold">{t.event}</span>
+                      <span className="text-xs text-default-400">
+                        {formatTimestamp(t.timestamp)}
+                      </span>
+                    </div>
+                  }
+                  subtitle={
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-default-400">
+                      <span>Tx: {truncateMiddle(t.txHash, 10, 6)}</span>
+                      <span>•</span>
+                      <span>Block: {t.blockNumber ?? "—"}</span>
+                    </div>
+                  }
                 >
-                  <div className="space-y-2 text-sm">
-                    <p>
-                      <strong>Tx Hash:</strong>{" "}
-                      <code className="break-all">{t.txHash}</code>
-                    </p>
-                     <p>
-                      <strong>From:</strong> {t.from ?? "—"}
-                    </p>
-                     <p>
-                      <strong>To:</strong> {t.to ?? "—"}
-                    </p>
-                    <p>
-                      <strong>Block No:</strong> {t.blockNumber ?? "—"}
-                    </p>
-                    <p>
-                      <strong>Timestamp:</strong> {formatTimestamp(t.timestamp)}
-                    </p>
+                  <div className="space-y-3 text-sm">
+                    <TxnField label="Block No.">
+                      {t.blockNumber ?? "—"}
+                    </TxnField>
+                    <TxnField label="Tx Hash">
+                      {t.txHash ? (
+                        <span className="font-mono text-xs">{t.txHash}</span>
+                      ) : (
+                        "—"
+                      )}
+                    </TxnField>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {/* From */}
+                      <TxnField label="From">
+                        {t.from ? (
+                          <span className="font-mono text-xs">{t.from}</span>
+                        ) : (
+                          "—"
+                        )}
+                      </TxnField>
+                      <TxnField label="To">
+                        {t.to ? (
+                          <span className="font-mono text-xs">{t.to}</span>
+                        ) : (
+                          "—"
+                        )}
+                      </TxnField>
+                    </div>
+                    <TxnField label="Timestamp">
+                      {formatTimestamp(t.timestamp)}
+                    </TxnField>
                   </div>
                 </AccordionItem>
               ))}
@@ -318,10 +398,63 @@ export default function MetadataDetailPage() {
   );
 }
 
+/* ---------- Small Components & Utility Functions ---------- */
+
+function InfoField(props: { label: string; children: React.ReactNode }) {
+  const { label, children } = props;
+  return (
+    <div className="space-y-1">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-default-400">
+        {label}
+      </div>
+      <div className="text-sm text-default-700 dark:text-default-200 break-words">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function TxnField(props: { label: string; children: React.ReactNode }) {
+  const { label, children } = props;
+  return (
+    <div className="space-y-1">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-default-400">
+        {label}
+      </div>
+      <div className="text-sm text-default-700 dark:text-default-200 break-words">
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function formatTimestamp(ts: number | null) {
   if (ts == null) return "—";
   const ms = ts < 1e12 ? ts * 1000 : ts;
   const d = new Date(ms);
   return isNaN(d.getTime()) ? String(ts) : d.toLocaleString();
+}
+
+function truncateMiddle(str: string, left = 6, right = 4) {
+  if (!str) return "—";
+  if (str.length <= left + right + 3) return str;
+  return `${str.slice(0, left)}...${str.slice(-right)}`;
+}
+
+function isUrl(v: string) {
+  try {
+    new URL(v);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getStatusColor(status?: string | null) {
+  if (!status) return "default";
+  const s = status.toLowerCase();
+  if (["active", "published", "enabled"].includes(s)) return "success";
+  if (["pending", "draft"].includes(s)) return "warning";
+  if (["disabled", "error", "failed"].includes(s)) return "danger";
+  return "default";
 }

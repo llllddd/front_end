@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useProtectedRoute } from '@/utils/hooks/useProtectedRoute';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
-const METADATA_ENDPOINT = '/dataset/createMetadata';          // 提交元数据
-const FILE_UPLOAD_ENDPOINT = '/upload-primary'; // 提交文件（请按你的后端实际路径修改）
+const METADATA_ENDPOINT = '/dataset/createMetadata';         
+const FILE_UPLOAD_ENDPOINT = '/upload-primary'; 
 
 interface MetadataPayload {
   title: string;
@@ -18,7 +18,7 @@ interface MetadataPayload {
   contact: string;
   owner: string;
   providerId: number;
-  primarydataId: string | null; // 将由文件上传接口返回的ID填入
+  primarydataId: string | null; 
   status: 'ACTIVE' | 'INACTIVE' | string;
 }
 
@@ -45,22 +45,53 @@ export default function NewMetadataPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
 
-  // Route protection
+  // Route protection UX: show spinner while auth resolves; prompt login if not allowed
   React.useEffect(() => {
-    if (!authCompleted) return;
-    if (!allowed) return;
-  }, [allowed, authCompleted, router]);
+    // No redirects here; just rely on UI prompts below
+  }, [allowed, authCompleted]);
 
-  // Don't render if not authenticated or not verified
-  if (!authCompleted || !allowed) {
-    return null;
+  if (!authCompleted) {
+    return (
+      <main className="mx-auto max-w-3xl p-6">
+        <h1 className="text-2xl font-semibold mb-4">Create Metadata</h1>
+        <div className="rounded-md border bg-gray-50 p-3 text-sm text-gray-700">
+          Authenticating… Please wait.
+        </div>
+      </main>
+    );
+  }
+
+  if (!allowed) {
+    return (
+      <main className="mx-auto max-w-3xl p-6">
+        <h1 className="text-2xl font-semibold mb-4">Create Metadata</h1>
+        <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 mb-4">
+          You need to be logged in and verified to submit metadata.
+        </div>
+        {/* Use a typed helper to avoid TS narrowing issues */}
+        {(() => {
+          const doLogin = () => {
+            const fn = login as unknown as (() => void) | undefined;
+            if (typeof fn === "function") fn();
+            else router.push("/auth/verify");
+          };
+          return (
+        <button
+          onClick={doLogin}
+          className="rounded-xl border px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700"
+        >
+          Login / Verify
+        </button>
+          );
+        })()}
+      </main>
+    );
   }
 
   function update<K extends keyof MetadataPayload>(key: K, value: MetadataPayload[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  // 单独的文件上传函数（使用另外一个 API）
   async function uploadFileToSeparateAPI(file: File): Promise<{ primarydataId: string | null; raw: any }>
   {
     if (!API_BASE) throw new Error('Missing NEXT_PUBLIC_API_BASE_URL');
@@ -79,7 +110,6 @@ export default function NewMetadataPage() {
 
     const data = await res.json().catch(() => ({} as any));
 
-    // ⚠️ 按你的后端返回结构取值。这里尝试常见的几种字段名。
     const primarydataId = data.primarydataId ?? data.primaryDataId ?? data.id ?? null;
     return { primarydataId, raw: data };
   }
@@ -99,7 +129,7 @@ export default function NewMetadataPage() {
 
       let primarydataIdFromUpload: string | null = form.primarydataId;
 
-      // 1) 先上传文件到“另一个 API”，拿到 primarydataId
+      // 1) first upload file to FILE_UPLOAD_ENDPOINT
       if (file) {
         const { primarydataId } = await uploadFileToSeparateAPI(file);
         if (!primarydataId) {
@@ -108,7 +138,7 @@ export default function NewMetadataPage() {
         primarydataIdFromUpload = primarydataId;
       }
 
-      // 2) 再提交元数据到 METADATA_ENDPOINT（使用 JSON）
+      // 2) then submit metadata to METADATA_ENDPOINT (using JSON)
       const payload: MetadataPayload = { ...form, primarydataId: primarydataIdFromUpload };
 
       const res = await fetch(`${API_BASE}${METADATA_ENDPOINT}`, {
@@ -180,7 +210,7 @@ export default function NewMetadataPage() {
         {/* <Field label="primarydataId">
           <input className="w-full rounded-md border p-2" value={form.primarydataId ?? ''} onChange={(e) => update('primarydataId', e.target.value || null)} />
         </Field> */}
-        {/* 文件上传行：左文字右输入，同时显示预览信息 */}
+        {/* File upload row: left label, right input, with preview information */}
         <Field label="Upload File" required>
           <div className="flex flex-col gap-2">
             <input
