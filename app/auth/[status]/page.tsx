@@ -32,8 +32,14 @@ export default function SignInPage() {
 
   // Already authenticated? Only allow signup page
   // Avoid redirecting too early — wait for the initial auth check to complete.
+  useEffect(() => {
+    if (authCompleted && login.authenticated && status !== "signup") {
+      router.replace("/");
+    }
+  }, [authCompleted, login.authenticated, status, router]);
+
+  // Don't render if already authenticated (unless on signup page)
   if (authCompleted && login.authenticated && status !== "signup") {
-    router.replace("/");
     return null;
   }
 

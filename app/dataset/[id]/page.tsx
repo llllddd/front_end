@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { useParams } from "next/navigation";
+import { Link } from "@heroui/link";
+import { Button } from "@heroui/button";
 import {
   Table,
   TableHeader,
@@ -111,8 +113,19 @@ export default function MetadataDetailPage() {
 
   return (
     <main className="mx-auto max-w-4xl p-6 space-y-6">
-      <header className="flex items-center justify-center">
+      <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Metadata Detail</h1>
+        {id && (
+          <Button
+            as={Link}
+            href={`/dataset/${id}/edit`}
+            color="primary"
+            size="sm"
+            radius="lg"
+          >
+            Edit Metadata
+          </Button>
+        )}
       </header>
 
       {!id && (
