@@ -21,7 +21,7 @@ export default function ProfilePage() {
   const [openChangeEmail, setOpenChangeEmail] = useState(false);
 
   function handleDeleteProfile() {
-    // 触发你的自定义逻辑
+    // TODO: Implement delete profile logic
     alert("TODO: implement delete profile logic");
   }
 
